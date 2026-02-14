@@ -1,0 +1,13 @@
+services:
+  bevvyrun:
+    build: .
+    env_file: app.env
+    restart: unless-stopped
+    volumes:
+      - ./data:/data/
+    networks:
+      - caddy_net
+
+networks:
+  caddy_net:
+    external: true

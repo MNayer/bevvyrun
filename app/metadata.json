@@ -1,0 +1,5 @@
+{
+  "name": "BevvyRun - Team Order Manager",
+  "description": "Manage team beverage orders, track costs, and generate payment reminder emails.",
+  "requestFramePermissions": []
+}
