@@ -311,8 +311,11 @@ app.post('/api/sessions/:id/lock', async (req, res) => {
         if (!session) return res.status(404).json({ error: 'Session not found' });
         if (session.hostId !== hostIdHeader) return res.status(403).json({ error: 'Unauthorized' });
 
-        // Update Session Status
-        await db.run('UPDATE sessions SET status = "LOCKED" WHERE id = ?', sessionId);
+        // Update Session Status and Save Template
+        await db.run('UPDATE sessions SET status = "LOCKED", emailTemplate = ? WHERE id = ?', [template, sessionId]);
+
+        // Save as Default Setting (Upsert)
+        await db.run('INSERT INTO settings (key, value) VALUES ("email_template", ?) ON CONFLICT(key) DO UPDATE SET value = ?', [template, template]);
 
         // Get all unpaid user orders
         const orders = await db.all('SELECT * FROM user_orders WHERE sessionId = ? AND isPaid = 0', sessionId);
