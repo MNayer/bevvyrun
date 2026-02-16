@@ -474,6 +474,42 @@ app.delete('/api/users/:email', requireAuth, async (req, res) => {
     }
 });
 
+// Send Reminder Emails
+app.post('/api/users/:email/remind', requireAuth, async (req, res) => {
+    try {
+        const db = getDB();
+        const { email } = req.params;
+
+        // Find unpaid orders for this user
+        const orders = await db.all('SELECT * FROM user_orders WHERE userEmail = ? AND isPaid = 0', email);
+
+        if (orders.length === 0) {
+            return res.json({ success: true, count: 0 });
+        }
+
+        let count = 0;
+        for (const order of orders) {
+            // Get Session Template if locked, or Global Default
+            const session = await db.get('SELECT emailTemplate, status FROM sessions WHERE id = ?', order.sessionId);
+            let template = session ? session.emailTemplate : null;
+
+            if (!template) {
+                const setting = await db.get('SELECT value FROM settings WHERE key = "email_template"');
+                template = setting ? setting.value : "Please pay {ORDER_AMOUNT} for your order {ORDER_ID}.";
+            }
+
+            if (template) {
+                sendPaymentEmail(email, order.id, order.totalAmount - (order.paidAmount || 0), template, "Reminder: Payment Request - BevvyRun");
+                count++;
+            }
+        }
+
+        res.json({ success: true, count });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Delete Session (Limit to Host)
 app.delete('/api/sessions/:id', async (req, res) => {
     try {

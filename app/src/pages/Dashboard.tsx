@@ -49,6 +49,29 @@ const UserBalanceList: React.FC = () => {
         fetchUsers();
     };
 
+    const handleRemind = async (email: string) => {
+        const token = localStorage.getItem('host_token');
+        if (!token) return;
+
+        if (!confirm(`Send payment reminders to ${email} for all unpaid orders?`)) return;
+
+        try {
+            const res = await fetch(`/api/users/${email}/remind`, {
+                method: 'POST',
+                headers: { 'Authorization': token }
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Sent ${data.count} reminder emails.`);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Failed to send reminders.');
+        }
+    };
+
     const token = localStorage.getItem('host_token');
 
     return (
@@ -81,6 +104,9 @@ const UserBalanceList: React.FC = () => {
                                         <div className="flex gap-2">
                                             <Button onClick={() => updateCredit(u.email, u.credit)} className="bg-blue-500 text-white text-xs py-1 px-2">
                                                 Edit Credit
+                                            </Button>
+                                            <Button onClick={() => handleRemind(u.email)} className="bg-yellow-500 text-white text-xs py-1 px-2">
+                                                Remind
                                             </Button>
                                             <Button
                                                 onClick={async () => {

@@ -31,7 +31,7 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-export async function sendPaymentEmail(to, orderId, amount, template) {
+export async function sendPaymentEmail(to, orderId, amount, template, subject = 'Payment Request - BevvyRun') {
     const text = template
         .replace(/{ORDER_ID}/g, orderId)
         .replace(/{ORDER_AMOUNT}/g, amount.toFixed(2));
@@ -41,7 +41,7 @@ export async function sendPaymentEmail(to, orderId, amount, template) {
         await transporter.sendMail({
             from: `"BevvyRun" <${EMAIL_USER}>`,
             to,
-            subject: 'Payment Request - BevvyRun',
+            subject,
             text,
         });
         console.log(`Email sent to ${to} for order ${orderId}`);
