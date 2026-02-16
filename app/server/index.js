@@ -76,27 +76,34 @@ app.post('/api/login', (req, res) => {
 });
 
 // Update Order Item (Edit)
-app.patch('/api/orders/:id/items/:itemId', requireAuth, async (req, res) => {
+// Update Order Item (Edit)
+app.patch('/api/orders/:id/items/:itemId', async (req, res) => {
     try {
         const db = getDB();
         const { itemId } = req.params;
         const { itemName, price } = req.body;
 
-        await db.run('UPDATE order_items SET itemName = ?, price = ? WHERE id = ?', [itemName, price, itemId]);
-
-        // Recalculate User Order Total ??
-        // Complex: Updating item price changes totalAmount of user_order.
-        // We should recalculate based on all items.
-        // Get userOrderId
+        // Auth Check
         const item = await db.get('SELECT userOrderId, sessionId FROM order_items WHERE id = ?', itemId);
-        if (item) {
-            const items = await db.all('SELECT price FROM order_items WHERE userOrderId = ?', item.userOrderId);
-            const newTotal = items.reduce((sum, i) => sum + i.price, 0);
-            await db.run('UPDATE user_orders SET totalAmount = ? WHERE id = ?', [newTotal, item.userOrderId]);
+        if (!item) return res.status(404).json({ error: 'Item not found' });
 
-            io.to(item.sessionId).emit('session_updated'); // Force refresh
+        const session = await db.get('SELECT hostId FROM sessions WHERE id = ?', item.sessionId);
+        const adminToken = req.headers['authorization'];
+        const hostIdHeader = req.headers['x-host-id'];
+
+        if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
+             return res.status(401).json({ error: 'Unauthorized' });
         }
 
+        await db.run('UPDATE order_items SET itemName = ?, price = ? WHERE id = ?', [itemName, price, itemId]);
+
+        // Recalculate User Order Total
+        const items = await db.all('SELECT price FROM order_items WHERE userOrderId = ?', item.userOrderId);
+        const newTotal = items.reduce((sum, i) => sum + i.price, 0);
+        await db.run('UPDATE user_orders SET totalAmount = ? WHERE id = ?', [newTotal, item.userOrderId]);
+
+        io.to(item.sessionId).emit('session_updated'); // Force refresh
+        
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -104,22 +111,33 @@ app.patch('/api/orders/:id/items/:itemId', requireAuth, async (req, res) => {
 });
 
 // Delete Order Item
-app.delete('/api/orders/:id/items/:itemId', requireAuth, async (req, res) => {
+// Delete Order Item
+app.delete('/api/orders/:id/items/:itemId', async (req, res) => {
     try {
         const db = getDB();
         const { itemId } = req.params;
 
+        // Auth Check
         const item = await db.get('SELECT userOrderId, sessionId FROM order_items WHERE id = ?', itemId);
-        if (item) {
-            await db.run('DELETE FROM order_items WHERE id = ?', itemId);
+        if (!item) return res.status(404).json({ error: 'Item not found' });
 
-            // Recalculate
-            const items = await db.all('SELECT price FROM order_items WHERE userOrderId = ?', item.userOrderId);
-            const newTotal = items.reduce((sum, i) => sum + i.price, 0);
-            await db.run('UPDATE user_orders SET totalAmount = ? WHERE id = ?', [newTotal, item.userOrderId]);
+        const session = await db.get('SELECT hostId FROM sessions WHERE id = ?', item.sessionId);
+        const adminToken = req.headers['authorization'];
+        const hostIdHeader = req.headers['x-host-id'];
 
-            io.to(item.sessionId).emit('session_updated');
+        if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
+             return res.status(401).json({ error: 'Unauthorized' });
         }
+
+        await db.run('DELETE FROM order_items WHERE id = ?', itemId);
+
+        // Recalculate
+        const items = await db.all('SELECT price FROM order_items WHERE userOrderId = ?', item.userOrderId);
+        const newTotal = items.reduce((sum, i) => sum + i.price, 0);
+        await db.run('UPDATE user_orders SET totalAmount = ? WHERE id = ?', [newTotal, item.userOrderId]);
+
+        io.to(item.sessionId).emit('session_updated');
+        
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -127,18 +145,28 @@ app.delete('/api/orders/:id/items/:itemId', requireAuth, async (req, res) => {
 });
 
 // Mark Order as Paid (Host Manual Update)
-app.post('/api/orders/:id/mark-paid', requireAuth, async (req, res) => {
+// Mark Order as Paid (Host Manual Update)
+app.post('/api/orders/:id/mark-paid', async (req, res) => {
     try {
         const db = getDB();
         const { id } = req.params;
         const { isPaid } = req.body; // true/false
 
-        await db.run('UPDATE user_orders SET isPaid = ? WHERE id = ?', [isPaid ? 1 : 0, id]);
-
+        // Auth Check
         const order = await db.get('SELECT sessionId FROM user_orders WHERE id = ?', id);
-        if (order) {
-            io.to(order.sessionId).emit('session_updated');
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+
+        const session = await db.get('SELECT hostId FROM sessions WHERE id = ?', order.sessionId);
+        const adminToken = req.headers['authorization'];
+        const hostIdHeader = req.headers['x-host-id'];
+
+        if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
+             return res.status(401).json({ error: 'Unauthorized' });
         }
+
+        await db.run('UPDATE user_orders SET isPaid = ? WHERE id = ?', [isPaid ? 1 : 0, id]);
+        io.to(order.sessionId).emit('session_updated');
+        
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -146,7 +174,7 @@ app.post('/api/orders/:id/mark-paid', requireAuth, async (req, res) => {
 });
 
 // Get Settings
-app.get('/api/settings/:key', requireAuth, async (req, res) => {
+app.get('/api/settings/:key', async (req, res) => {
     try {
         const db = getDB();
         const { key } = req.params;
@@ -405,13 +433,21 @@ app.post('/api/users/credit', requireAuth, async (req, res) => {
 });
 
 // Delete Order (Entire Order)
-app.delete('/api/orders/:id', requireAuth, async (req, res) => {
+app.delete('/api/orders/:id', async (req, res) => {
     try {
         const db = getDB();
         const { id } = req.params;
 
         const order = await db.get('SELECT sessionId FROM user_orders WHERE id = ?', id);
         if (!order) return res.status(404).json({ error: 'Order not found' });
+
+        const session = await db.get('SELECT hostId FROM sessions WHERE id = ?', order.sessionId);
+        const adminToken = req.headers['authorization'];
+        const hostIdHeader = req.headers['x-host-id'];
+
+        if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
+             return res.status(401).json({ error: 'Unauthorized' });
+        }
 
         // Delete items first
         await db.run('DELETE FROM order_items WHERE userOrderId = ?', id);
@@ -439,10 +475,20 @@ app.delete('/api/users/:email', requireAuth, async (req, res) => {
 });
 
 // Delete Session (Limit to Host)
-app.delete('/api/sessions/:id', requireAuth, async (req, res) => {
+app.delete('/api/sessions/:id', async (req, res) => {
     try {
         const db = getDB();
         const { id } = req.params;
+
+        const session = await db.get('SELECT hostId FROM sessions WHERE id = ?', id);
+        if (!session) return res.status(404).json({ error: 'Session not found' });
+
+        const adminToken = req.headers['authorization'];
+        const hostIdHeader = req.headers['x-host-id'];
+
+        if (adminToken !== process.env.HOST_PASSWORD && session.hostId !== hostIdHeader) {
+             return res.status(401).json({ error: 'Unauthorized' });
+        }
 
         // Delete dependencies
         const orders = await db.all('SELECT id FROM user_orders WHERE sessionId = ?', id);

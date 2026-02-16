@@ -116,16 +116,13 @@ export const Dashboard: React.FC = () => {
 
     React.useEffect(() => {
         const fetchSettings = async () => {
-            const token = localStorage.getItem('host_token');
-            if (token) {
-                try {
-                    const res = await fetch('/api/settings/email_template', { headers: { 'Authorization': token } });
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.value) setTemplate(data.value);
-                    }
-                } catch (e) { console.error(e); }
-            }
+            try {
+                const res = await fetch('/api/settings/email_template');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.value) setTemplate(data.value);
+                }
+            } catch (e) { console.error(e); }
         };
         fetchSettings();
     }, []);
@@ -193,12 +190,17 @@ export const Dashboard: React.FC = () => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     const token = localStorage.getItem('host_token');
-                                                    if (!token) return;
+                                                    const hostId = localStorage.getItem(`session_host_${session.id}`);
+                                                    if (!token && !hostId) return;
                                                     if (!confirm(`Delete session "${session.name}"? This cannot be undone.`)) return;
+
+                                                    const headers: Record<string, string> = {};
+                                                    if (token) headers['Authorization'] = token;
+                                                    if (hostId) headers['X-Host-ID'] = hostId;
 
                                                     await fetch(`/api/sessions/${session.id}`, {
                                                         method: 'DELETE',
-                                                        headers: { 'Authorization': token }
+                                                        headers
                                                     });
                                                     // Refresh list
                                                     window.location.reload(); // Simple refresh or use useSessions hook update
@@ -244,7 +246,10 @@ export const Dashboard: React.FC = () => {
                     <Button
                         onClick={async () => {
                             const token = localStorage.getItem('host_token');
-                            if (!token) return;
+                            if (!token) {
+                                alert("Please login as host (in User Accounts section or separate login page) to save global settings.");
+                                return;
+                            }
                             await fetch('/api/settings', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json', 'Authorization': token },

@@ -10,8 +10,8 @@ export const SessionPage: React.FC = () => {
 
     const [userName, setUserName] = useState('');
     const [userEmail, setUserEmail] = useState('');
-    const [cartItems, setCartItems] = useState<{ itemName: string, price: number }[]>([]);
-    const [newItem, setNewItem] = useState({ itemName: '', price: '' });
+    const [cartItems, setCartItems] = useState<{ itemName: string, price: number, quantity: number }[]>([]);
+    const [newItem, setNewItem] = useState({ itemName: '', price: '', quantity: '1' });
 
     const [copied, setCopied] = useState(false);
     const [isLocking, setIsLocking] = useState(false);
@@ -19,16 +19,13 @@ export const SessionPage: React.FC = () => {
 
     React.useEffect(() => {
         const fetchSettings = async () => {
-            const token = localStorage.getItem('host_token');
-            if (token) {
-                try {
-                    const res = await fetch('/api/settings/email_template', { headers: { 'Authorization': token } });
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.value) setEmailTemplate(data.value);
-                    }
-                } catch (e) { console.error(e); }
-            }
+            try {
+                const res = await fetch('/api/settings/email_template');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.value) setEmailTemplate(data.value);
+                }
+            } catch (e) { console.error(e); }
         };
         fetchSettings();
     }, []);
@@ -38,8 +35,12 @@ export const SessionPage: React.FC = () => {
     const addToCart = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newItem.itemName) return;
-        setCartItems([...cartItems, { itemName: newItem.itemName, price: parseFloat(newItem.price) || 0 }]);
-        setNewItem({ itemName: '', price: '' });
+        setCartItems([...cartItems, { 
+            itemName: newItem.itemName, 
+            price: parseFloat(newItem.price) || 0,
+            quantity: parseInt(newItem.quantity) || 1
+        }]);
+        setNewItem({ itemName: '', price: '', quantity: '1' });
     };
 
     const removeFromCart = (index: number) => {
@@ -53,7 +54,13 @@ export const SessionPage: React.FC = () => {
             alert("Please fill in your name, email, and add at least one item.");
             return;
         }
-        await submitOrder(userName, userEmail, cartItems);
+
+        // Expand items based on quantity
+        const expandedItems = cartItems.flatMap(item => 
+            Array(item.quantity).fill({ itemName: item.itemName, price: item.price })
+        );
+
+        await submitOrder(userName, userEmail, expandedItems);
         setCartItems([]);
         alert("Order submitted!");
     };
@@ -73,7 +80,7 @@ export const SessionPage: React.FC = () => {
 
     const inputClasses = "mt-1 block w-full bg-white text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-0 focus:border-black p-3 font-medium transition-all focus:translate-x-[2px] focus:translate-y-[2px] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]";
 
-    const cartTotal = cartItems.reduce((sum, item) => sum + item.price, 0);
+    const cartTotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
     return (
         <div className="max-w-6xl mx-auto px-4 py-8">
@@ -155,10 +162,18 @@ export const SessionPage: React.FC = () => {
                                     <div className="border-t-2 border-black pt-4 mt-4">
                                         <div className="flex gap-2">
                                             <input
+                                                type="number"
+                                                min="1"
+                                                value={newItem.quantity}
+                                                onChange={e => setNewItem({ ...newItem, quantity: e.target.value })}
+                                                className={`${inputClasses} w-20`}
+                                                placeholder="Qty"
+                                            />
+                                            <input
                                                 type="text"
                                                 value={newItem.itemName}
                                                 onChange={e => setNewItem({ ...newItem, itemName: e.target.value })}
-                                                className={inputClasses}
+                                                className={`${inputClasses} flex-1`}
                                                 placeholder="Item Name"
                                             />
                                             <input
@@ -180,7 +195,10 @@ export const SessionPage: React.FC = () => {
                                         <ul className="space-y-2">
                                             {cartItems.map((item, idx) => (
                                                 <li key={idx} className="flex justify-between items-center text-sm">
-                                                    <span>{item.itemName} (${item.price.toFixed(2)})</span>
+                                                    <span>
+                                                        {item.quantity > 1 && <span className="font-bold mr-1">{item.quantity}x</span>}
+                                                        {item.itemName} (${(item.price * item.quantity).toFixed(2)})
+                                                    </span>
                                                     <button onClick={() => removeFromCart(idx)} className="text-red-500 hover:text-red-700">
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -226,10 +244,16 @@ export const SessionPage: React.FC = () => {
                                                     <Button
                                                         onClick={async () => {
                                                             const token = localStorage.getItem('host_token');
-                                                            if (!token) return;
+                                                            const hostId = localStorage.getItem(`session_host_${id}`);
+                                                            if (!token && !hostId) return;
+
+                                                            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                                                            if (token) headers['Authorization'] = token;
+                                                            if (hostId) headers['X-Host-ID'] = hostId;
+
                                                             await fetch(`/api/orders/${order.id}/mark-paid`, {
                                                                 method: 'POST',
-                                                                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                                                                headers,
                                                                 body: JSON.stringify({ isPaid: !order.isPaid })
                                                             });
                                                             // Real-time update will handle UI
@@ -244,10 +268,16 @@ export const SessionPage: React.FC = () => {
                                                         onClick={async () => {
                                                             if (!confirm('Delete entire order?')) return;
                                                             const token = localStorage.getItem('host_token');
-                                                            if (!token) return;
+                                                            const hostId = localStorage.getItem(`session_host_${id}`);
+                                                            if (!token && !hostId) return;
+
+                                                            const headers: Record<string, string> = {};
+                                                            if (token) headers['Authorization'] = token;
+                                                            if (hostId) headers['X-Host-ID'] = hostId;
+
                                                             await fetch(`/api/orders/${order.id}`, {
                                                                 method: 'DELETE',
-                                                                headers: { 'Authorization': token }
+                                                                headers,
                                                             });
                                                         }}
                                                         className="text-red-500 hover:text-red-700 font-bold"
@@ -272,10 +302,16 @@ export const SessionPage: React.FC = () => {
                                                                         const newPrice = prompt("Edit Price:", item.price.toString());
                                                                         if (newName && newPrice) {
                                                                             const token = localStorage.getItem('host_token');
-                                                                            if (!token) return;
+                                                                            const hostId = localStorage.getItem(`session_host_${id}`);
+                                                                            if (!token && !hostId) return;
+
+                                                                            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                                                                            if (token) headers['Authorization'] = token;
+                                                                            if (hostId) headers['X-Host-ID'] = hostId;
+
                                                                             await fetch(`/api/orders/${order.id}/items/${item.id}`, {
                                                                                 method: 'PATCH',
-                                                                                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                                                                                headers,
                                                                                 body: JSON.stringify({ itemName: newName, price: parseFloat(newPrice) })
                                                                             });
                                                                         }
@@ -288,10 +324,16 @@ export const SessionPage: React.FC = () => {
                                                                     onClick={async () => {
                                                                         if (!confirm('Delete item?')) return;
                                                                         const token = localStorage.getItem('host_token');
-                                                                        if (!token) return;
+                                                                        const hostId = localStorage.getItem(`session_host_${id}`);
+                                                                        if (!token && !hostId) return;
+
+                                                                        const headers: Record<string, string> = {};
+                                                                        if (token) headers['Authorization'] = token;
+                                                                        if (hostId) headers['X-Host-ID'] = hostId;
+
                                                                         await fetch(`/api/orders/${order.id}/items/${item.id}`, {
                                                                             method: 'DELETE',
-                                                                            headers: { 'Authorization': token }
+                                                                            headers
                                                                         });
                                                                     }}
                                                                     className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 font-bold"
