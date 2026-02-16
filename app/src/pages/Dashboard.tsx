@@ -11,9 +11,11 @@ const UserBalanceList: React.FC = () => {
     const fetchUsers = async () => {
         setLoading(true);
         const token = localStorage.getItem('host_token');
-        if (!token) return;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = token;
+
         try {
-            const res = await fetch('/api/users', { headers: { 'Authorization': token } });
+            const res = await fetch('/api/users', { headers });
             if (res.ok) {
                 setUsers(await res.json());
             }
@@ -48,7 +50,6 @@ const UserBalanceList: React.FC = () => {
     };
 
     const token = localStorage.getItem('host_token');
-    if (!token) return null; // Only show for hosts
 
     return (
         <div className="mt-16 bg-white border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8">
@@ -63,7 +64,7 @@ const UserBalanceList: React.FC = () => {
                             <th className="p-3 font-black uppercase">Outstanding Debt</th>
                             <th className="p-3 font-black uppercase">Credit Balance</th>
                             <th className="p-3 font-black uppercase">Net Total</th>
-                            <th className="p-3 font-black uppercase">Action</th>
+                            {token && <th className="p-3 font-black uppercase">Action</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -76,31 +77,33 @@ const UserBalanceList: React.FC = () => {
                                     ${(u.credit - u.debt).toFixed(2)}
                                 </td>
                                 <td className="p-3">
-                                    <div className="flex gap-2">
-                                        <Button onClick={() => updateCredit(u.email, u.credit)} className="bg-blue-500 text-white text-xs py-1 px-2">
-                                            Edit Credit
-                                        </Button>
-                                        <Button
-                                            onClick={async () => {
-                                                if (!confirm(`Delete account/credit for ${u.email}? This will verify clear their balance.`)) return;
-                                                const token = localStorage.getItem('host_token');
-                                                if (!token) return;
-                                                await fetch(`/api/users/${u.email}`, {
-                                                    method: 'DELETE',
-                                                    headers: { 'Authorization': token }
-                                                });
-                                                fetchUsers();
-                                            }}
-                                            className="bg-red-500 text-white text-xs py-1 px-2"
-                                        >
-                                            Delete
-                                        </Button>
-                                    </div>
+                                    {token && (
+                                        <div className="flex gap-2">
+                                            <Button onClick={() => updateCredit(u.email, u.credit)} className="bg-blue-500 text-white text-xs py-1 px-2">
+                                                Edit Credit
+                                            </Button>
+                                            <Button
+                                                onClick={async () => {
+                                                    if (!confirm(`Delete account/credit for ${u.email}? This will verify clear their balance.`)) return;
+                                                    const token = localStorage.getItem('host_token');
+                                                    if (!token) return;
+                                                    await fetch(`/api/users/${u.email}`, {
+                                                        method: 'DELETE',
+                                                        headers: { 'Authorization': token }
+                                                    });
+                                                    fetchUsers();
+                                                }}
+                                                className="bg-red-500 text-white text-xs py-1 px-2"
+                                            >
+                                                Delete
+                                            </Button>
+                                        </div>
+                                    )}
                                 </td>
                             </tr>
                         ))}
                         {users.length === 0 && (
-                            <tr><td colSpan={5} className="p-4 text-center italic text-gray-500">{loading ? 'Loading...' : 'No user data found.'}</td></tr>
+                            <tr><td colSpan={token ? 5 : 4} className="p-4 text-center italic text-gray-500">{loading ? 'Loading...' : 'No user data found.'}</td></tr>
                         )}
                     </tbody>
                 </table>

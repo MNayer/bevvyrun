@@ -92,7 +92,7 @@ app.patch('/api/orders/:id/items/:itemId', async (req, res) => {
         const hostIdHeader = req.headers['x-host-id'];
 
         if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
-             return res.status(401).json({ error: 'Unauthorized' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         await db.run('UPDATE order_items SET itemName = ?, price = ? WHERE id = ?', [itemName, price, itemId]);
@@ -103,7 +103,7 @@ app.patch('/api/orders/:id/items/:itemId', async (req, res) => {
         await db.run('UPDATE user_orders SET totalAmount = ? WHERE id = ?', [newTotal, item.userOrderId]);
 
         io.to(item.sessionId).emit('session_updated'); // Force refresh
-        
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -126,7 +126,7 @@ app.delete('/api/orders/:id/items/:itemId', async (req, res) => {
         const hostIdHeader = req.headers['x-host-id'];
 
         if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
-             return res.status(401).json({ error: 'Unauthorized' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         await db.run('DELETE FROM order_items WHERE id = ?', itemId);
@@ -137,7 +137,7 @@ app.delete('/api/orders/:id/items/:itemId', async (req, res) => {
         await db.run('UPDATE user_orders SET totalAmount = ? WHERE id = ?', [newTotal, item.userOrderId]);
 
         io.to(item.sessionId).emit('session_updated');
-        
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -161,12 +161,12 @@ app.post('/api/orders/:id/mark-paid', async (req, res) => {
         const hostIdHeader = req.headers['x-host-id'];
 
         if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
-             return res.status(401).json({ error: 'Unauthorized' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         await db.run('UPDATE user_orders SET isPaid = ? WHERE id = ?', [isPaid ? 1 : 0, id]);
         io.to(order.sessionId).emit('session_updated');
-        
+
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -372,7 +372,7 @@ io.on('connection', (socket) => {
 });
 
 // User Balance APIs
-app.get('/api/users', requireAuth, async (req, res) => {
+app.get('/api/users', async (req, res) => {
     try {
         const db = getDB();
 
@@ -446,7 +446,7 @@ app.delete('/api/orders/:id', async (req, res) => {
         const hostIdHeader = req.headers['x-host-id'];
 
         if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
-             return res.status(401).json({ error: 'Unauthorized' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         // Delete items first
@@ -487,7 +487,7 @@ app.delete('/api/sessions/:id', async (req, res) => {
         const hostIdHeader = req.headers['x-host-id'];
 
         if (adminToken !== process.env.HOST_PASSWORD && session.hostId !== hostIdHeader) {
-             return res.status(401).json({ error: 'Unauthorized' });
+            return res.status(401).json({ error: 'Unauthorized' });
         }
 
         // Delete dependencies
