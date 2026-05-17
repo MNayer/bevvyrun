@@ -14,6 +14,11 @@ export async function initDB() {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
+  const uploadsDir = path.join(dataDir, 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
   const dbPath = path.join(dataDir, 'bevvy.db');
 
   db = await open({
@@ -63,6 +68,21 @@ export async function initDB() {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS purchases (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      amount REAL,
+      type TEXT,
+      imageFilename TEXT,
+      createdAt INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS withdrawals (
+      id TEXT PRIMARY KEY,
+      amount REAL,
+      createdAt INTEGER
     );
   `);
 

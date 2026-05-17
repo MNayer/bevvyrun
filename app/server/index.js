@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { sendPaymentEmail, checkEmails } from './email.js';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,10 @@ app.use((req, res, next) => {
 // Serve static files from the React app
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
+
+// Serve uploads
+const dataDir = process.env.DATA_DIR || './data';
+app.use('/uploads', express.static(path.join(dataDir, 'uploads')));
 
 // Initialize DB
 initDB().then(() => {
@@ -536,6 +541,152 @@ app.delete('/api/sessions/:id', async (req, res) => {
 
         io.emit('session_deleted', id);
         res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- PURCHASES ---
+app.get('/api/purchases', async (req, res) => {
+    try {
+        const db = getDB();
+        const purchases = await db.all('SELECT * FROM purchases ORDER BY createdAt DESC');
+        res.json(purchases);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/purchases', requireAuth, async (req, res) => {
+    try {
+        const db = getDB();
+        const { name, amount, type, image } = req.body;
+        const id = uuidv4();
+        const createdAt = Date.now();
+        let imageFilename = null;
+
+        if (image && image.startsWith('data:image')) {
+            const matches = image.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+                const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+                const buffer = Buffer.from(matches[2], 'base64');
+                imageFilename = `${id}.${ext}`;
+                const uploadPath = path.join(dataDir, 'uploads', imageFilename);
+                fs.writeFileSync(uploadPath, buffer);
+            }
+        }
+
+        await db.run(
+            'INSERT INTO purchases (id, name, amount, type, imageFilename, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, name, amount, type || 'OTHER', imageFilename, createdAt]
+        );
+
+        res.status(201).json({ success: true, id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- WITHDRAWALS ---
+app.get('/api/withdrawals', async (req, res) => {
+    try {
+        const db = getDB();
+        const withdrawals = await db.all('SELECT * FROM withdrawals ORDER BY createdAt DESC');
+        res.json(withdrawals);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/withdrawals', requireAuth, async (req, res) => {
+    try {
+        const db = getDB();
+        const { amount } = req.body;
+        const id = uuidv4();
+        const createdAt = Date.now();
+
+        await db.run(
+            'INSERT INTO withdrawals (id, amount, createdAt) VALUES (?, ?, ?)',
+            [id, amount, createdAt]
+        );
+
+        res.status(201).json({ success: true, id });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- ACCOUNTING ---
+app.get('/api/accounting', async (req, res) => {
+    try {
+        const db = getDB();
+        const view = req.query.view || 'general'; // 'general' or 'coffee'
+
+        // Get Credits
+        const credits = await db.all('SELECT balance FROM user_credits');
+        const totalCreditBalance = credits.reduce((sum, c) => sum + c.balance, 0);
+
+        // Get Orders
+        let ordersQuery = 'SELECT uo.*, s.name as sessionName FROM user_orders uo JOIN sessions s ON uo.sessionId = s.id';
+        let ordersParams = [];
+
+        if (view === 'coffee') {
+            ordersQuery += ' WHERE LOWER(s.name) LIKE ?';
+            ordersParams.push('%coffee%');
+        }
+
+        const orders = await db.all(ordersQuery, ordersParams);
+
+        let totalOrdersValue = 0;
+        let totalUserDebt = 0;
+
+        for (const o of orders) {
+            totalOrdersValue += o.totalAmount;
+            if (o.isPaid === 0) {
+                totalUserDebt += (o.totalAmount - (o.paidAmount || 0));
+            }
+        }
+
+        // Get Purchases
+        let purchasesQuery = 'SELECT * FROM purchases';
+        let purchasesParams = [];
+
+        if (view === 'coffee') {
+            purchasesQuery += ' WHERE type = ?';
+            purchasesParams.push('COFFEE');
+        }
+
+        const purchases = await db.all(purchasesQuery, purchasesParams);
+        const totalPurchases = purchases.reduce((sum, p) => sum + p.amount, 0);
+
+        // Get Withdrawals
+        const withdrawals = await db.all('SELECT * FROM withdrawals');
+        // Withdrawals are always counted, or maybe we don't subtract them in "coffee" view to see strictly coffee profit?
+        // Let's only apply withdrawals to general view to show exact register cash.
+        // Wait, if it's a "coffee" view, do we show register cash?
+        // "coffee view that only includes coffee runs and coffee bean purchases."
+        // We'll calculate a "coffee balance" = Coffee Orders - Coffee Purchases.
+        // But let's return totalWithdrawals regardless.
+        const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
+
+        // Calculate Register Cash
+        // Formula: Sum(orders) - Sum(debt) + Sum(credits) - Sum(purchases) - Sum(withdrawals)
+        // Wait, if view=coffee, credits and withdrawals aren't easily partitioned.
+        // So the frontend can display whatever it wants.
+        const moneyCollectedFromOrders = totalOrdersValue - totalUserDebt;
+        let registerBalance = moneyCollectedFromOrders + totalCreditBalance - totalPurchases - totalWithdrawals;
+
+        res.json({
+            totalOrdersValue,
+            totalUserDebt,
+            totalCreditBalance,
+            totalPurchases,
+            totalWithdrawals,
+            registerBalance,
+            moneyCollectedFromOrders,
+            purchases,
+            withdrawals
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

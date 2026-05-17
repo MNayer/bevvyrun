@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-ro
 import { Dashboard } from './pages/Dashboard';
 import { SessionPage } from './pages/SessionPage';
 import { LoginPage } from './pages/LoginPage';
+import { Accounting } from './pages/Accounting';
+import { PhysicalBackup } from './pages/PhysicalBackup';
 import { Coffee } from 'lucide-react';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -38,6 +40,16 @@ const App: React.FC = () => {
             </ProtectedRoute>
           } />
           <Route path="/session/:id" element={<SessionPage />} />
+          <Route path="/accounting" element={
+            <ProtectedRoute>
+              <Accounting />
+            </ProtectedRoute>
+          } />
+          <Route path="/physical-backup" element={
+            <ProtectedRoute>
+              <PhysicalBackup />
+            </ProtectedRoute>
+          } />
         </Routes>
       </div>
     </Router>

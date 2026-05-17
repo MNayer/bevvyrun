@@ -258,11 +258,18 @@ export const Dashboard: React.FC = () => {
             {/* User Accounts */}
             <UserBalanceList />
 
-            {/* Settings */}
+            {/* Settings & Links */}
             <div className="mt-16 bg-white border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-2xl">
-                <h2 className="text-2xl font-black uppercase mb-6 flex items-center gap-3">
-                    Settings
-                </h2>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-black uppercase flex items-center gap-3">
+                        Settings
+                    </h2>
+                    <Link to="/accounting">
+                        <Button className="bg-[#10b981] text-black">
+                            Open Accounting Dashboard
+                        </Button>
+                    </Link>
+                </div>
                 <div className="space-y-4">
                     <label className="block text-sm font-bold uppercase">Default Email Template</label>
                     <textarea
