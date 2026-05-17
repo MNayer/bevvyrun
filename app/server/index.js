@@ -587,6 +587,68 @@ app.post('/api/purchases', requireAuth, async (req, res) => {
     }
 });
 
+app.patch('/api/purchases/:id', requireAuth, async (req, res) => {
+    try {
+        const db = getDB();
+        const { id } = req.params;
+        const { name, amount, type, image } = req.body;
+        
+        const purchase = await db.get('SELECT imageFilename FROM purchases WHERE id = ?', id);
+        if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
+
+        let imageFilename = purchase.imageFilename;
+
+        if (image && image.startsWith('data:image')) {
+            const matches = image.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+                const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+                const buffer = Buffer.from(matches[2], 'base64');
+                imageFilename = `${id}.${ext}`;
+                const uploadPath = path.join(dataDir, 'uploads', imageFilename);
+                fs.writeFileSync(uploadPath, buffer);
+            }
+        } else if (image === null && purchase.imageFilename) {
+            // Remove image if image is explicitly passed as null
+            const oldPath = path.join(dataDir, 'uploads', purchase.imageFilename);
+            if (fs.existsSync(oldPath)) {
+                fs.unlinkSync(oldPath);
+            }
+            imageFilename = null;
+        }
+
+        await db.run(
+            'UPDATE purchases SET name = ?, amount = ?, type = ?, imageFilename = ? WHERE id = ?',
+            [name, amount, type, imageFilename, id]
+        );
+
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/purchases/:id', requireAuth, async (req, res) => {
+    try {
+        const db = getDB();
+        const { id } = req.params;
+
+        const purchase = await db.get('SELECT imageFilename FROM purchases WHERE id = ?', id);
+        if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
+
+        if (purchase.imageFilename) {
+            const imagePath = path.join(dataDir, 'uploads', purchase.imageFilename);
+            if (fs.existsSync(imagePath)) {
+                fs.unlinkSync(imagePath);
+            }
+        }
+
+        await db.run('DELETE FROM purchases WHERE id = ?', id);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // --- WITHDRAWALS ---
 app.get('/api/withdrawals', async (req, res) => {
     try {

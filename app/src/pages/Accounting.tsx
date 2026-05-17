@@ -39,7 +39,8 @@ export const Accounting: React.FC = () => {
     const [purchaseName, setPurchaseName] = useState('');
     const [purchaseAmount, setPurchaseAmount] = useState('');
     const [purchaseType, setPurchaseType] = useState('COFFEE');
-    const [purchaseImage, setPurchaseImage] = useState<string | null>(null);
+    const [purchaseImage, setPurchaseImage] = useState<string | null | undefined>(undefined);
+    const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // New Withdrawal State
@@ -90,24 +91,60 @@ export const Accounting: React.FC = () => {
         const amt = parseFloat(purchaseAmount);
         if (!purchaseName || isNaN(amt)) return;
 
-        await fetch('/api/purchases', {
-            method: 'POST',
+        const body: any = {
+            name: purchaseName,
+            amount: amt,
+            type: purchaseType,
+        };
+        
+        // If image was changed (either removed = null, or new image = string)
+        if (purchaseImage !== undefined) {
+            body.image = purchaseImage;
+        }
+
+        const method = editingPurchaseId ? 'PATCH' : 'POST';
+        const url = editingPurchaseId ? `/api/purchases/${editingPurchaseId}` : '/api/purchases';
+
+        await fetch(url, {
+            method,
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': token
             },
-            body: JSON.stringify({
-                name: purchaseName,
-                amount: amt,
-                type: purchaseType,
-                image: purchaseImage
-            })
+            body: JSON.stringify(body)
         });
 
+        cancelEdit();
+        fetchData();
+    };
+
+    const cancelEdit = () => {
+        setEditingPurchaseId(null);
         setPurchaseName('');
         setPurchaseAmount('');
-        setPurchaseImage(null);
+        setPurchaseType('COFFEE');
+        setPurchaseImage(undefined);
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const editPurchase = (p: Purchase) => {
+        setEditingPurchaseId(p.id);
+        setPurchaseName(p.name);
+        setPurchaseAmount(p.amount.toString());
+        setPurchaseType(p.type);
+        setPurchaseImage(undefined); // unchanged by default
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const deletePurchase = async (id: string) => {
+        if (!confirm('Are you sure you want to delete this expense?')) return;
+        
+        await fetch(`/api/purchases/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': token }
+        });
+        
+        if (editingPurchaseId === id) cancelEdit();
         fetchData();
     };
 
@@ -198,7 +235,7 @@ export const Accounting: React.FC = () => {
                     <div className="lg:col-span-2 space-y-8">
                         <div className="bg-white border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6">
                             <h2 className="text-2xl font-black uppercase mb-6 flex items-center gap-2">
-                                <FileText className="w-6 h-6" /> Add Expense / Invoice
+                                <FileText className="w-6 h-6" /> {editingPurchaseId ? 'Edit Expense' : 'Add Expense / Invoice'}
                             </h2>
                             <form onSubmit={submitPurchase} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="md:col-span-2">
@@ -220,11 +257,20 @@ export const Accounting: React.FC = () => {
                                     <label className="block text-sm font-bold uppercase mb-1">Invoice Image (Optional)</label>
                                     <div className="flex items-center gap-4">
                                         <input type="file" accept="image/*" onChange={handleImageUpload} ref={fileInputRef} className="file:border-2 file:border-black file:bg-yellow-300 file:text-black file:font-bold file:px-4 file:py-2 file:mr-4 hover:file:bg-yellow-400 cursor-pointer text-sm font-bold" />
-                                        {purchaseImage && <span className="text-green-600 font-bold flex items-center gap-1"><ImageIcon className="w-4 h-4"/> Attached</span>}
+                                        {(purchaseImage === undefined && editingPurchaseId && data.purchases.find(p => p.id === editingPurchaseId)?.imageFilename) && (
+                                            <span className="text-blue-600 font-bold flex items-center gap-1"><ImageIcon className="w-4 h-4"/> Existing Image</span>
+                                        )}
+                                        {purchaseImage && purchaseImage !== null && <span className="text-green-600 font-bold flex items-center gap-1"><ImageIcon className="w-4 h-4"/> New Image Attached</span>}
+                                        {((purchaseImage === undefined && editingPurchaseId && data.purchases.find(p => p.id === editingPurchaseId)?.imageFilename) || purchaseImage) && (
+                                            <button type="button" onClick={() => { setPurchaseImage(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-red-600 text-xs font-bold underline">Remove</button>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="md:col-span-2 mt-2">
-                                    <Button type="submit" className="w-full bg-black text-white">Save Expense</Button>
+                                <div className="md:col-span-2 mt-2 flex gap-4">
+                                    <Button type="submit" className="w-full bg-black text-white">{editingPurchaseId ? 'Update Expense' : 'Save Expense'}</Button>
+                                    {editingPurchaseId && (
+                                        <Button type="button" onClick={cancelEdit} className="w-full bg-gray-400 text-black">Cancel</Button>
+                                    )}
                                 </div>
                             </form>
                         </div>
@@ -240,13 +286,17 @@ export const Accounting: React.FC = () => {
                                             <div>
                                                 <div className="font-black text-lg">{p.name}</div>
                                                 <div className="text-sm font-bold text-gray-500">{new Date(p.createdAt).toLocaleDateString()} - {p.type}</div>
-                                                {p.imageFilename && (
-                                                    <a href={`/uploads/${p.imageFilename}`} target="_blank" rel="noreferrer" className="text-blue-600 font-bold text-xs mt-1 inline-block hover:underline">
-                                                        View Invoice
-                                                    </a>
-                                                )}
+                                                <div className="flex gap-3 mt-1 items-center">
+                                                    {p.imageFilename && (
+                                                        <a href={`/uploads/${p.imageFilename}`} target="_blank" rel="noreferrer" className="text-blue-600 font-bold text-xs inline-block hover:underline">
+                                                            View Invoice
+                                                        </a>
+                                                    )}
+                                                    <button onClick={() => editPurchase(p)} className="text-yellow-600 font-bold text-xs hover:underline">Edit</button>
+                                                    <button onClick={() => deletePurchase(p.id)} className="text-red-600 font-bold text-xs hover:underline">Delete</button>
+                                                </div>
                                             </div>
-                                            <div className="font-black text-xl text-red-600">
+                                            <div className="font-black text-xl text-red-600 text-right">
                                                 -${p.amount.toFixed(2)}
                                             </div>
                                         </div>
