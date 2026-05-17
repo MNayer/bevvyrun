@@ -202,6 +202,17 @@ app.post('/api/settings', requireAuth, async (req, res) => {
     }
 });
 
+app.post('/api/settings/reset-coffee-counter', requireAuth, async (req, res) => {
+    try {
+        const db = getDB();
+        const value = Date.now().toString();
+        await db.run('INSERT INTO settings (key, value) VALUES ("coffee_reset_date", ?) ON CONFLICT(key) DO UPDATE SET value = ?', [value, value]);
+        res.json({ success: true, timestamp: value });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Create new session
 app.post('/api/sessions', async (req, res) => {
     try {
@@ -723,20 +734,45 @@ app.get('/api/accounting', async (req, res) => {
 
         // Get Withdrawals
         const withdrawals = await db.all('SELECT * FROM withdrawals');
-        // Withdrawals are always counted, or maybe we don't subtract them in "coffee" view to see strictly coffee profit?
-        // Let's only apply withdrawals to general view to show exact register cash.
-        // Wait, if it's a "coffee" view, do we show register cash?
-        // "coffee view that only includes coffee runs and coffee bean purchases."
-        // We'll calculate a "coffee balance" = Coffee Orders - Coffee Purchases.
-        // But let's return totalWithdrawals regardless.
         const totalWithdrawals = withdrawals.reduce((sum, w) => sum + w.amount, 0);
 
         // Calculate Register Cash
-        // Formula: Sum(orders) - Sum(debt) + Sum(credits) - Sum(purchases) - Sum(withdrawals)
-        // Wait, if view=coffee, credits and withdrawals aren't easily partitioned.
-        // So the frontend can display whatever it wants.
+        // Register Cash = Money Collected + Credits - Withdrawals
         const moneyCollectedFromOrders = totalOrdersValue - totalUserDebt;
-        let registerBalance = moneyCollectedFromOrders + totalCreditBalance - totalPurchases - totalWithdrawals;
+        let registerBalance = moneyCollectedFromOrders + totalCreditBalance - totalWithdrawals;
+
+        // --- NEW: Coffee View Metrics ---
+        let totalCoffeeItems = 0;
+        let historicalCoffeePrice = 0;
+        let resetDate = 0;
+        let coffeeItemsSinceReset = 0;
+        let expensesSinceReset = 0;
+        let currentCoffeePrice = 0;
+
+        if (view === 'coffee') {
+            // All-time coffee metrics
+            const allTimeItemsRes = await db.get('SELECT COUNT(*) as count FROM order_items oi JOIN sessions s ON oi.sessionId = s.id WHERE LOWER(s.name) LIKE "%coffee%"');
+            totalCoffeeItems = allTimeItemsRes.count;
+            historicalCoffeePrice = totalCoffeeItems > 0 ? totalPurchases / totalCoffeeItems : 0;
+
+            // Reset counter logic
+            const resetSetting = await db.get('SELECT value FROM settings WHERE key = "coffee_reset_date"');
+            resetDate = resetSetting ? parseInt(resetSetting.value, 10) : 0;
+
+            if (resetDate > 0) {
+                const itemsSinceRes = await db.get('SELECT COUNT(*) as count FROM order_items oi JOIN sessions s ON oi.sessionId = s.id WHERE LOWER(s.name) LIKE "%coffee%" AND s.createdAt > ?', resetDate);
+                coffeeItemsSinceReset = itemsSinceRes.count;
+
+                const expensesSinceRes = await db.get('SELECT SUM(amount) as sum FROM purchases WHERE type = "COFFEE" AND createdAt > ?', resetDate);
+                expensesSinceReset = expensesSinceRes.sum || 0;
+
+                currentCoffeePrice = coffeeItemsSinceReset > 0 ? expensesSinceReset / coffeeItemsSinceReset : 0;
+            } else {
+                coffeeItemsSinceReset = totalCoffeeItems;
+                expensesSinceReset = totalPurchases;
+                currentCoffeePrice = historicalCoffeePrice;
+            }
+        }
 
         res.json({
             totalOrdersValue,
@@ -747,7 +783,14 @@ app.get('/api/accounting', async (req, res) => {
             registerBalance,
             moneyCollectedFromOrders,
             purchases,
-            withdrawals
+            withdrawals,
+            // Coffee metrics
+            totalCoffeeItems,
+            historicalCoffeePrice,
+            resetDate,
+            coffeeItemsSinceReset,
+            expensesSinceReset,
+            currentCoffeePrice
         });
     } catch (e) {
         res.status(500).json({ error: e.message });

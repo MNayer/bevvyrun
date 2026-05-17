@@ -28,6 +28,12 @@ interface AccountingData {
     moneyCollectedFromOrders: number;
     purchases: Purchase[];
     withdrawals: Withdrawal[];
+    totalCoffeeItems: number;
+    historicalCoffeePrice: number;
+    resetDate: number;
+    coffeeItemsSinceReset: number;
+    expensesSinceReset: number;
+    currentCoffeePrice: number;
 }
 
 export const Accounting: React.FC = () => {
@@ -166,6 +172,17 @@ export const Accounting: React.FC = () => {
         fetchData();
     };
 
+    const resetCoffeeCounter = async () => {
+        if (!confirm('Are you sure you want to reset the coffee counter? This will start a new measurement period.')) return;
+        
+        await fetch('/api/settings/reset-coffee-counter', {
+            method: 'POST',
+            headers: { 'Authorization': token }
+        });
+        
+        fetchData();
+    };
+
     const inputClasses = "mt-1 block w-full bg-white text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 font-medium focus:translate-x-[2px] focus:translate-y-[2px] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all";
 
     return (
@@ -216,7 +233,6 @@ export const Accounting: React.FC = () => {
                             {view === 'general' && (
                                 <div className="mt-4 text-sm font-bold border-t-2 border-black pt-2">
                                     Total Collected: ${(data.moneyCollectedFromOrders + data.totalCreditBalance).toFixed(2)}<br/>
-                                    - Expenses: ${data.totalPurchases.toFixed(2)}<br/>
                                     - Withdrawals: ${data.totalWithdrawals.toFixed(2)}
                                 </div>
                             )}
@@ -226,10 +242,40 @@ export const Accounting: React.FC = () => {
                             <div className="text-5xl font-black">${data.totalUserDebt.toFixed(2)}</div>
                         </div>
                         <div className="bg-[#3b82f6] text-white border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6">
-                            <h3 className="font-black uppercase mb-2 text-lg">Expenses</h3>
+                            <h3 className="font-black uppercase mb-2 text-lg">Admin Out-of-Pocket Expenses</h3>
                             <div className="text-5xl font-black">${data.totalPurchases.toFixed(2)}</div>
                         </div>
                     </div>
+
+                    {/* Coffee Stats Section (Only visible in Coffee view) */}
+                    {view === 'coffee' && (
+                        <div className="lg:col-span-3 bg-[#e879f9] text-black border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 flex flex-col md:flex-row justify-between items-center gap-6">
+                            <div className="flex gap-8">
+                                <div>
+                                    <h4 className="font-black uppercase text-sm mb-1">Current Period Coffees</h4>
+                                    <div className="text-3xl font-black">{data.coffeeItemsSinceReset}</div>
+                                </div>
+                                <div>
+                                    <h4 className="font-black uppercase text-sm mb-1">Current Period Price</h4>
+                                    <div className="text-3xl font-black">${data.currentCoffeePrice.toFixed(2)} / cup</div>
+                                </div>
+                                <div>
+                                    <h4 className="font-black uppercase text-sm mb-1">All-Time Coffees</h4>
+                                    <div className="text-3xl font-black">{data.totalCoffeeItems}</div>
+                                </div>
+                            </div>
+                            <div className="text-right flex flex-col items-end gap-2">
+                                {data.resetDate > 0 && (
+                                    <div className="text-xs font-bold bg-white border-2 border-black px-2 py-1">
+                                        Since: {new Date(data.resetDate).toLocaleDateString()}
+                                    </div>
+                                )}
+                                <Button onClick={resetCoffeeCounter} className="bg-black text-white text-sm py-2">
+                                    Reset Measurement Counter
+                                </Button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Purchases Column */}
                     <div className="lg:col-span-2 space-y-8">
