@@ -797,6 +797,21 @@ app.get('/api/accounting', async (req, res) => {
     }
 });
 
+// Coffee Route Shortcut
+app.get('/coffee', async (req, res) => {
+    try {
+        const db = getDB();
+        const session = await db.get('SELECT id FROM sessions WHERE LOWER(name) LIKE "%coffee%" AND (status IS NULL OR status != "LOCKED") ORDER BY createdAt DESC LIMIT 1');
+        if (session) {
+            res.redirect(`/session/${session.id}`);
+        } else {
+            res.redirect('/');
+        }
+    } catch (e) {
+        res.redirect('/');
+    }
+});
+
 // Serve React App
 app.get(/.*/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));

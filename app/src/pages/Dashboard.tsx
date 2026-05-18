@@ -141,6 +141,7 @@ const UserBalanceList: React.FC = () => {
 export const Dashboard: React.FC = () => {
     const { sessions, createSession } = useSessions();
     const [newSessionName, setNewSessionName] = useState('');
+    const [isCoffeeRun, setIsCoffeeRun] = useState(false);
     const [template, setTemplate] = useState('');
 
     React.useEffect(() => {
@@ -158,9 +159,16 @@ export const Dashboard: React.FC = () => {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newSessionName.trim()) return;
-        await createSession(newSessionName);
+        let finalName = newSessionName.trim();
+        if (!finalName) return;
+        
+        if (isCoffeeRun && !finalName.toLowerCase().includes('coffee')) {
+            finalName = `${finalName} (Coffee)`;
+        }
+        
+        await createSession(finalName);
         setNewSessionName('');
+        setIsCoffeeRun(false);
     };
 
     const inputClasses = "mt-1 block w-full bg-white text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-0 focus:border-black p-3 font-medium transition-all focus:translate-x-[2px] focus:translate-y-[2px] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]";
@@ -184,6 +192,18 @@ export const Dashboard: React.FC = () => {
                                 className={inputClasses}
                             />
                         </div>
+                        <div className="flex items-center gap-2 pt-2 pb-2">
+                            <input 
+                                type="checkbox" 
+                                id="isCoffeeRun"
+                                checked={isCoffeeRun} 
+                                onChange={(e) => setIsCoffeeRun(e.target.checked)} 
+                                className="w-5 h-5 border-2 border-black accent-[#8b5cf6]"
+                            />
+                            <label htmlFor="isCoffeeRun" className="text-sm font-bold uppercase cursor-pointer flex items-center gap-2">
+                                <Coffee className="w-5 h-5" /> Mark as Coffee Run
+                            </label>
+                        </div>
                         <Button type="submit" className="w-full bg-[#8b5cf6] text-white">
                             Start Session
                         </Button>
@@ -201,13 +221,18 @@ export const Dashboard: React.FC = () => {
                             No active runs. Start one!
                         </div>
                     ) : (
-                        sessions.map(session => (
+                        sessions.map(session => {
+                            const isCoffee = session.name.toLowerCase().includes('coffee');
+                            return (
                             <Link key={session.id} to={`/session/${session.id}`} className="block group">
-                                <div className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6 transition-all group-hover:translate-x-[2px] group-hover:translate-y-[2px] group-hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <div className={`border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-6 transition-all group-hover:translate-x-[2px] group-hover:translate-y-[2px] group-hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${isCoffee ? 'bg-[#fbcfe8]' : 'bg-white'}`}>
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <h3 className="text-xl font-bold uppercase">{session.name}</h3>
-                                            <p className="text-sm text-gray-500 mt-1">
+                                            <h3 className="text-xl font-bold uppercase flex items-center gap-2">
+                                                {isCoffee && <Coffee className="w-5 h-5 text-pink-600" />}
+                                                {session.name}
+                                            </h3>
+                                            <p className={`text-sm mt-1 font-bold ${isCoffee ? 'text-pink-800' : 'text-gray-500'}`}>
                                                 {new Date(session.createdAt).toLocaleTimeString()}
                                             </p>
                                         </div>
@@ -250,7 +275,7 @@ export const Dashboard: React.FC = () => {
                                     </div>
                                 </div>
                             </Link>
-                        ))
+                        )})
                     )}
                 </div>
             </div>
