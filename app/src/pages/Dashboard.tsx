@@ -143,6 +143,7 @@ export const Dashboard: React.FC = () => {
     const [newSessionName, setNewSessionName] = useState('');
     const [isCoffeeRun, setIsCoffeeRun] = useState(false);
     const [template, setTemplate] = useState('');
+    const [fixedCoffeePrice, setFixedCoffeePrice] = useState('');
 
     React.useEffect(() => {
         const fetchSettings = async () => {
@@ -151,6 +152,11 @@ export const Dashboard: React.FC = () => {
                 if (res.ok) {
                     const data = await res.json();
                     if (data.value) setTemplate(data.value);
+                }
+                const res2 = await fetch('/api/settings/fixed_coffee_price');
+                if (res2.ok) {
+                    const data2 = await res2.json();
+                    if (data2.value) setFixedCoffeePrice(data2.value);
                 }
             } catch (e) { console.error(e); }
         };
@@ -304,6 +310,17 @@ export const Dashboard: React.FC = () => {
                         rows={4}
                         placeholder="Please pay {ORDER_AMOUNT}..."
                     ></textarea>
+                    
+                    <label className="block text-sm font-bold uppercase mt-4">Fixed Coffee Price ($) [Leave blank to auto-calculate]</label>
+                    <input
+                        type="number"
+                        step="0.01"
+                        value={fixedCoffeePrice}
+                        onChange={(e) => setFixedCoffeePrice(e.target.value)}
+                        className={inputClasses}
+                        placeholder="e.g. 3.50"
+                    />
+
                     <Button
                         onClick={async () => {
                             const token = localStorage.getItem('host_token');
@@ -315,6 +332,11 @@ export const Dashboard: React.FC = () => {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json', 'Authorization': token },
                                 body: JSON.stringify({ key: 'email_template', value: template })
+                            });
+                            await fetch('/api/settings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                                body: JSON.stringify({ key: 'fixed_coffee_price', value: fixedCoffeePrice })
                             });
                             alert('Saved!');
                         }}

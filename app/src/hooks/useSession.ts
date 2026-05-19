@@ -84,6 +84,10 @@ export function useSession(sessionId: string) {
             alert("The host has locked the session!");
         });
 
+        newSocket.on('session_updated', () => {
+            fetchSession();
+        });
+
         return () => {
             newSocket.disconnect();
         };

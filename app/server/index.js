@@ -68,6 +68,43 @@ const requireAuth = (req, res, next) => {
     }
 };
 
+// Helper: Get Current Coffee Price
+async function getCurrentCoffeePrice(db) {
+    const fixedSetting = await db.get('SELECT value FROM settings WHERE key = "fixed_coffee_price"');
+    let fixedPrice = fixedSetting ? parseFloat(fixedSetting.value) : 0;
+
+    let totalCoffeeItems = 0;
+    let totalPurchases = 0;
+    const allPurchases = await db.all('SELECT amount FROM purchases WHERE type = "COFFEE"');
+    allPurchases.forEach(p => totalPurchases += p.amount);
+
+    const allTimeItemsRes = await db.get('SELECT COUNT(*) as count FROM order_items oi JOIN sessions s ON oi.sessionId = s.id WHERE LOWER(s.name) LIKE "%coffee%"');
+    totalCoffeeItems = allTimeItemsRes.count;
+    let currentCoffeePrice = totalCoffeeItems > 0 ? totalPurchases / totalCoffeeItems : 0;
+
+    const resetSetting = await db.get('SELECT value FROM settings WHERE key = "coffee_reset_date"');
+    const resetDate = resetSetting ? parseInt(resetSetting.value, 10) : 0;
+
+    let coffeeItemsSinceReset = totalCoffeeItems;
+    let expensesSinceReset = totalPurchases;
+
+    if (resetDate > 0) {
+        const itemsSinceRes = await db.get('SELECT COUNT(*) as count FROM order_items oi JOIN sessions s ON oi.sessionId = s.id WHERE LOWER(s.name) LIKE "%coffee%" AND s.createdAt > ?', resetDate);
+        coffeeItemsSinceReset = itemsSinceRes.count;
+
+        const expensesSinceRes = await db.get('SELECT SUM(amount) as sum FROM purchases WHERE type = "COFFEE" AND createdAt > ?', resetDate);
+        expensesSinceReset = expensesSinceRes.sum || 0;
+
+        currentCoffeePrice = coffeeItemsSinceReset > 0 ? expensesSinceReset / coffeeItemsSinceReset : 0;
+    }
+
+    if (fixedPrice > 0 && !isNaN(fixedPrice)) {
+        currentCoffeePrice = fixedPrice;
+    }
+
+    return { totalCoffeeItems, historicalCoffeePrice: totalCoffeeItems > 0 ? totalPurchases / totalCoffeeItems : 0, resetDate, coffeeItemsSinceReset, expensesSinceReset, currentCoffeePrice };
+}
+
 // API Endpoints
 
 // Login
@@ -742,36 +779,17 @@ app.get('/api/accounting', async (req, res) => {
         let registerBalance = moneyCollectedFromOrders + totalCreditBalance - totalWithdrawals;
 
         // --- NEW: Coffee View Metrics ---
-        let totalCoffeeItems = 0;
-        let historicalCoffeePrice = 0;
-        let resetDate = 0;
-        let coffeeItemsSinceReset = 0;
-        let expensesSinceReset = 0;
-        let currentCoffeePrice = 0;
+        let coffeeStats = {
+            totalCoffeeItems: 0,
+            historicalCoffeePrice: 0,
+            resetDate: 0,
+            coffeeItemsSinceReset: 0,
+            expensesSinceReset: 0,
+            currentCoffeePrice: 0
+        };
 
         if (view === 'coffee') {
-            // All-time coffee metrics
-            const allTimeItemsRes = await db.get('SELECT COUNT(*) as count FROM order_items oi JOIN sessions s ON oi.sessionId = s.id WHERE LOWER(s.name) LIKE "%coffee%"');
-            totalCoffeeItems = allTimeItemsRes.count;
-            historicalCoffeePrice = totalCoffeeItems > 0 ? totalPurchases / totalCoffeeItems : 0;
-
-            // Reset counter logic
-            const resetSetting = await db.get('SELECT value FROM settings WHERE key = "coffee_reset_date"');
-            resetDate = resetSetting ? parseInt(resetSetting.value, 10) : 0;
-
-            if (resetDate > 0) {
-                const itemsSinceRes = await db.get('SELECT COUNT(*) as count FROM order_items oi JOIN sessions s ON oi.sessionId = s.id WHERE LOWER(s.name) LIKE "%coffee%" AND s.createdAt > ?', resetDate);
-                coffeeItemsSinceReset = itemsSinceRes.count;
-
-                const expensesSinceRes = await db.get('SELECT SUM(amount) as sum FROM purchases WHERE type = "COFFEE" AND createdAt > ?', resetDate);
-                expensesSinceReset = expensesSinceRes.sum || 0;
-
-                currentCoffeePrice = coffeeItemsSinceReset > 0 ? expensesSinceReset / coffeeItemsSinceReset : 0;
-            } else {
-                coffeeItemsSinceReset = totalCoffeeItems;
-                expensesSinceReset = totalPurchases;
-                currentCoffeePrice = historicalCoffeePrice;
-            }
+            coffeeStats = await getCurrentCoffeePrice(db);
         }
 
         res.json({
@@ -785,30 +803,139 @@ app.get('/api/accounting', async (req, res) => {
             purchases,
             withdrawals,
             // Coffee metrics
-            totalCoffeeItems,
-            historicalCoffeePrice,
-            resetDate,
-            coffeeItemsSinceReset,
-            expensesSinceReset,
-            currentCoffeePrice
+            totalCoffeeItems: coffeeStats.totalCoffeeItems,
+            historicalCoffeePrice: coffeeStats.historicalCoffeePrice,
+            resetDate: coffeeStats.resetDate,
+            coffeeItemsSinceReset: coffeeStats.coffeeItemsSinceReset,
+            expensesSinceReset: coffeeStats.expensesSinceReset,
+            currentCoffeePrice: coffeeStats.currentCoffeePrice
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// Coffee Route Shortcut
-app.get('/coffee', async (req, res) => {
+// Kiosk APIs
+app.get('/api/coffee-run/active', async (req, res) => {
     try {
         const db = getDB();
-        const session = await db.get('SELECT id FROM sessions WHERE LOWER(name) LIKE "%coffee%" AND (status IS NULL OR status != "LOCKED") ORDER BY createdAt DESC LIMIT 1');
-        if (session) {
-            res.redirect(`/session/${session.id}`);
-        } else {
-            res.redirect('/');
+        const { email } = req.query;
+
+        const session = await db.get('SELECT * FROM sessions WHERE LOWER(name) LIKE "%coffee%" AND (status IS NULL OR status != "LOCKED") ORDER BY createdAt DESC LIMIT 1');
+        
+        if (!session) {
+            return res.json({ active: false });
         }
+
+        const coffeeStats = await getCurrentCoffeePrice(db);
+        
+        let userCoffees = 0;
+        let userSpent = 0;
+
+        if (email) {
+            const userOrders = await db.all('SELECT id FROM user_orders WHERE sessionId = ? AND userEmail = ?', [session.id, email]);
+            for (const o of userOrders) {
+                const items = await db.all('SELECT price FROM order_items WHERE userOrderId = ? AND LOWER(itemName) LIKE "%coffee%"', [o.id]);
+                userCoffees += items.length;
+                for (const i of items) {
+                    userSpent += i.price;
+                }
+            }
+        }
+
+        res.json({
+            active: true,
+            session,
+            currentCoffeePrice: coffeeStats.currentCoffeePrice,
+            userCoffees,
+            userSpent
+        });
+
     } catch (e) {
-        res.redirect('/');
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/coffee-run/active/order', async (req, res) => {
+    try {
+        const db = getDB();
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: "Email required" });
+
+        const session = await db.get('SELECT * FROM sessions WHERE LOWER(name) LIKE "%coffee%" AND (status IS NULL OR status != "LOCKED") ORDER BY createdAt DESC LIMIT 1');
+        if (!session) return res.status(404).json({ error: "No active coffee run" });
+
+        const coffeeStats = await getCurrentCoffeePrice(db);
+        const price = coffeeStats.currentCoffeePrice;
+
+        const createdAt = Date.now();
+        const userName = email.split('@')[0];
+
+        let userOrder = await db.get('SELECT * FROM user_orders WHERE sessionId = ? AND userEmail = ? LIMIT 1', [session.id, email]);
+
+        let amountToPay = price;
+        let creditsUsed = 0;
+        const creditEntry = await db.get('SELECT balance FROM user_credits WHERE email = ?', email);
+        if (creditEntry && creditEntry.balance > 0) {
+            if (creditEntry.balance >= price) {
+                creditsUsed = price;
+                amountToPay = 0;
+                await db.run('UPDATE user_credits SET balance = balance - ? WHERE email = ?', [creditsUsed, email]);
+            } else {
+                creditsUsed = creditEntry.balance;
+                amountToPay = price - creditsUsed;
+                await db.run('UPDATE user_credits SET balance = 0 WHERE email = ?', email);
+            }
+        }
+
+        const itemId = uuidv4();
+        let userOrderId;
+
+        if (userOrder) {
+            userOrderId = userOrder.id;
+            const newTotalAmount = userOrder.totalAmount + price;
+            const newPaidAmount = (userOrder.paidAmount || 0) + creditsUsed;
+            const newIsPaid = (userOrder.isPaid === 1 && amountToPay === 0) ? 1 : 0;
+
+            await db.run(
+                'UPDATE user_orders SET totalAmount = ?, paidAmount = ?, isPaid = ? WHERE id = ?',
+                [newTotalAmount, newPaidAmount, newIsPaid, userOrderId]
+            );
+
+            await db.run(
+                'INSERT INTO order_items (id, sessionId, userOrderId, userName, itemName, price, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [itemId, session.id, userOrderId, userOrder.userName, "Coffee", price, createdAt]
+            );
+
+            io.to(session.id).emit('session_updated');
+        } else {
+            userOrderId = uuidv4();
+            await db.run(
+                'INSERT INTO user_orders (id, sessionId, userName, userEmail, totalAmount, paidAmount, isPaid, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [userOrderId, session.id, userName, email, price, creditsUsed, amountToPay === 0 ? 1 : 0, createdAt]
+            );
+
+            await db.run(
+                'INSERT INTO order_items (id, sessionId, userOrderId, userName, itemName, price, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [itemId, session.id, userOrderId, userName, "Coffee", price, createdAt]
+            );
+
+            io.to(session.id).emit('order_added', {
+                id: userOrderId,
+                sessionId: session.id,
+                userName,
+                userEmail: email,
+                totalAmount: price,
+                paidAmount: creditsUsed,
+                isPaid: amountToPay === 0 ? 1 : 0,
+                items: [{ id: itemId, itemName: "Coffee", price }],
+                createdAt
+            });
+        }
+
+        res.json({ success: true, price });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 

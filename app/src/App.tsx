@@ -5,6 +5,7 @@ import { SessionPage } from './pages/SessionPage';
 import { LoginPage } from './pages/LoginPage';
 import { Accounting } from './pages/Accounting';
 import { PhysicalBackup } from './pages/PhysicalBackup';
+import { CoffeeKiosk } from './pages/CoffeeKiosk';
 import { Coffee } from 'lucide-react';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -39,6 +40,7 @@ const App: React.FC = () => {
               <Dashboard />
             </ProtectedRoute>
           } />
+          <Route path="/coffee" element={<CoffeeKiosk />} />
           <Route path="/session/:id" element={<SessionPage />} />
           <Route path="/accounting" element={
             <ProtectedRoute>
