@@ -485,6 +485,33 @@ app.post('/api/users/credit', requireAuth, async (req, res) => {
     }
 });
 
+app.patch('/api/orders/:id', async (req, res) => {
+    try {
+        const db = getDB();
+        const { id } = req.params;
+        const { userName } = req.body;
+
+        const order = await db.get('SELECT sessionId FROM user_orders WHERE id = ?', id);
+        if (!order) return res.status(404).json({ error: 'Order not found' });
+
+        const session = await db.get('SELECT hostId FROM sessions WHERE id = ?', order.sessionId);
+        const adminToken = req.headers['authorization'];
+        const hostIdHeader = req.headers['x-host-id'];
+
+        if (adminToken !== process.env.HOST_PASSWORD && (!session || session.hostId !== hostIdHeader)) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        await db.run('UPDATE user_orders SET userName = ? WHERE id = ?', [userName, id]);
+        await db.run('UPDATE order_items SET userName = ? WHERE userOrderId = ?', [userName, id]);
+
+        io.to(order.sessionId).emit('session_updated');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Delete Order (Entire Order)
 app.delete('/api/orders/:id', async (req, res) => {
     try {

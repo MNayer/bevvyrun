@@ -263,29 +263,55 @@ export const SessionPage: React.FC = () => {
                                                         {order.isPaid ? 'Unpaid' : 'Mark Paid'}
                                                     </Button>
                                                 )}
-                                                {isHost && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (!confirm('Delete entire order?')) return;
-                                                            const token = localStorage.getItem('host_token');
-                                                            const hostId = localStorage.getItem(`session_host_${id}`);
-                                                            if (!token && !hostId) return;
+                                                        {isHost && (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    const newName = prompt("Edit User Name:", order.userName);
+                                                                    if (newName && newName !== order.userName) {
+                                                                        const token = localStorage.getItem('host_token');
+                                                                        const hostId = localStorage.getItem(`session_host_${id}`);
+                                                                        if (!token && !hostId) return;
 
-                                                            const headers: Record<string, string> = {};
-                                                            if (token) headers['Authorization'] = token;
-                                                            if (hostId) headers['X-Host-ID'] = hostId;
+                                                                        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                                                                        if (token) headers['Authorization'] = token;
+                                                                        if (hostId) headers['X-Host-ID'] = hostId;
 
-                                                            await fetch(`/api/orders/${order.id}`, {
-                                                                method: 'DELETE',
-                                                                headers,
-                                                            });
-                                                        }}
-                                                        className="text-red-500 hover:text-red-700 font-bold"
-                                                        title="Delete Order"
-                                                    >
-                                                        <Trash2 className="w-5 h-5" />
-                                                    </button>
-                                                )}
+                                                                        await fetch(`/api/orders/${order.id}`, {
+                                                                            method: 'PATCH',
+                                                                            headers,
+                                                                            body: JSON.stringify({ userName: newName })
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="text-blue-500 hover:text-blue-700 font-bold"
+                                                                title="Edit Order"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                                            </button>
+                                                        )}
+                                                        {isHost && (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (!confirm('Delete entire order?')) return;
+                                                                    const token = localStorage.getItem('host_token');
+                                                                    const hostId = localStorage.getItem(`session_host_${id}`);
+                                                                    if (!token && !hostId) return;
+
+                                                                    const headers: Record<string, string> = {};
+                                                                    if (token) headers['Authorization'] = token;
+                                                                    if (hostId) headers['X-Host-ID'] = hostId;
+
+                                                                    await fetch(`/api/orders/${order.id}`, {
+                                                                        method: 'DELETE',
+                                                                        headers,
+                                                                    });
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 font-bold"
+                                                                title="Delete Order"
+                                                            >
+                                                                <Trash2 className="w-5 h-5" />
+                                                            </button>
+                                                        )}
                                             </div>
                                         </div>
                                         <ul className="space-y-1">
@@ -316,7 +342,7 @@ export const SessionPage: React.FC = () => {
                                                                             });
                                                                         }
                                                                     }}
-                                                                    className="opacity-0 group-hover:opacity-100 text-blue-500 hover:text-blue-700 font-bold text-xs mr-2"
+                                                                    className="text-blue-500 hover:text-blue-700 font-bold text-xs mr-2"
                                                                 >
                                                                     EDIT
                                                                 </button>
@@ -336,7 +362,7 @@ export const SessionPage: React.FC = () => {
                                                                             headers
                                                                         });
                                                                     }}
-                                                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 font-bold"
+                                                                    className="text-red-500 hover:text-red-700 font-bold"
                                                                 >
                                                                     X
                                                                 </button>
