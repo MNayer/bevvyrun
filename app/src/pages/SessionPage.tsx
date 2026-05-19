@@ -160,13 +160,13 @@ export const SessionPage: React.FC = () => {
                                         />
                                     </div>
                                     <div className="border-t-2 border-black pt-4 mt-4">
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             <input
                                                 type="number"
                                                 min="1"
                                                 value={newItem.quantity}
                                                 onChange={e => setNewItem({ ...newItem, quantity: e.target.value })}
-                                                className={`${inputClasses} w-20`}
+                                                className={`${inputClasses} w-full sm:w-20`}
                                                 placeholder="Qty"
                                             />
                                             <input
@@ -181,7 +181,7 @@ export const SessionPage: React.FC = () => {
                                                 step="0.01"
                                                 value={newItem.price}
                                                 onChange={e => setNewItem({ ...newItem, price: e.target.value })}
-                                                className={`${inputClasses} w-24`}
+                                                className={`${inputClasses} w-full sm:w-24`}
                                                 placeholder="Price"
                                             />
                                         </div>
@@ -263,111 +263,103 @@ export const SessionPage: React.FC = () => {
                                                         {order.isPaid ? 'Unpaid' : 'Mark Paid'}
                                                     </Button>
                                                 )}
-                                                        {isHost && (
-                                                            <button
-                                                                onClick={async () => {
-                                                                    const newName = prompt("Edit User Name:", order.userName);
-                                                                    if (newName && newName !== order.userName) {
-                                                                        const token = localStorage.getItem('host_token');
-                                                                        const hostId = localStorage.getItem(`session_host_${id}`);
-                                                                        if (!token && !hostId) return;
+                                                <button
+                                                    onClick={async () => {
+                                                        const newName = prompt("Edit User Name:", order.userName);
+                                                        if (newName && newName !== order.userName) {
+                                                            const token = localStorage.getItem('host_token');
+                                                            const hostId = localStorage.getItem(`session_host_${id}`);
+                                                            // if (!token && !hostId) return; // relaxed auth
 
-                                                                        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-                                                                        if (token) headers['Authorization'] = token;
-                                                                        if (hostId) headers['X-Host-ID'] = hostId;
+                                                            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                                                            if (token) headers['Authorization'] = token;
+                                                            if (hostId) headers['X-Host-ID'] = hostId;
 
-                                                                        await fetch(`/api/orders/${order.id}`, {
-                                                                            method: 'PATCH',
-                                                                            headers,
-                                                                            body: JSON.stringify({ userName: newName })
-                                                                        });
-                                                                    }
-                                                                }}
-                                                                className="text-blue-500 hover:text-blue-700 font-bold"
-                                                                title="Edit Order"
-                                                            >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                                                            </button>
-                                                        )}
-                                                        {isHost && (
-                                                            <button
-                                                                onClick={async () => {
-                                                                    if (!confirm('Delete entire order?')) return;
-                                                                    const token = localStorage.getItem('host_token');
-                                                                    const hostId = localStorage.getItem(`session_host_${id}`);
-                                                                    if (!token && !hostId) return;
+                                                            await fetch(`/api/orders/${order.id}`, {
+                                                                method: 'PATCH',
+                                                                headers,
+                                                                body: JSON.stringify({ userName: newName })
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="text-blue-500 hover:text-blue-700 font-bold"
+                                                    title="Edit Order"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm('Delete entire order?')) return;
+                                                        const token = localStorage.getItem('host_token');
+                                                        const hostId = localStorage.getItem(`session_host_${id}`);
+                                                        // if (!token && !hostId) return; // relaxed auth
 
-                                                                    const headers: Record<string, string> = {};
-                                                                    if (token) headers['Authorization'] = token;
-                                                                    if (hostId) headers['X-Host-ID'] = hostId;
+                                                        const headers: Record<string, string> = {};
+                                                        if (token) headers['Authorization'] = token;
+                                                        if (hostId) headers['X-Host-ID'] = hostId;
 
-                                                                    await fetch(`/api/orders/${order.id}`, {
-                                                                        method: 'DELETE',
-                                                                        headers,
-                                                                    });
-                                                                }}
-                                                                className="text-red-500 hover:text-red-700 font-bold"
-                                                                title="Delete Order"
-                                                            >
-                                                                <Trash2 className="w-5 h-5" />
-                                                            </button>
-                                                        )}
+                                                        await fetch(`/api/orders/${order.id}`, {
+                                                            method: 'DELETE',
+                                                            headers,
+                                                        });
+                                                    }}
+                                                    className="text-red-500 hover:text-red-700 font-bold"
+                                                    title="Delete Order"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
                                             </div>
                                         </div>
                                         <ul className="space-y-1">
                                             {order.items && order.items.map((item, i) => (
-                                                <li key={i} className="text-sm flex justify-between items-center group">
-                                                    <span>{item.itemName}</span>
-                                                    <div className="flex items-center gap-2">
+                                                <li key={i} className="text-sm flex justify-between items-start sm:items-center group gap-2">
+                                                    <span className="min-w-0 break-words flex-1">{item.itemName}</span>
+                                                    <div className="flex items-center gap-2 shrink-0">
                                                         <span className="text-gray-600">${item.price.toFixed(2)}</span>
-                                                        {isHost && (
-                                                            <>
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        const newName = prompt("Edit Item Name:", item.itemName);
-                                                                        const newPrice = prompt("Edit Price:", item.price.toString());
-                                                                        if (newName && newPrice) {
-                                                                            const token = localStorage.getItem('host_token');
-                                                                            const hostId = localStorage.getItem(`session_host_${id}`);
-                                                                            if (!token && !hostId) return;
+                                                        <button
+                                                            onClick={async () => {
+                                                                const newName = prompt("Edit Item Name:", item.itemName);
+                                                                const newPrice = prompt("Edit Price:", item.price.toString());
+                                                                if (newName && newPrice) {
+                                                                    const token = localStorage.getItem('host_token');
+                                                                    const hostId = localStorage.getItem(`session_host_${id}`);
+                                                                    // if (!token && !hostId) return;
 
-                                                                            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-                                                                            if (token) headers['Authorization'] = token;
-                                                                            if (hostId) headers['X-Host-ID'] = hostId;
+                                                                    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                                                                    if (token) headers['Authorization'] = token;
+                                                                    if (hostId) headers['X-Host-ID'] = hostId;
 
-                                                                            await fetch(`/api/orders/${order.id}/items/${item.id}`, {
-                                                                                method: 'PATCH',
-                                                                                headers,
-                                                                                body: JSON.stringify({ itemName: newName, price: parseFloat(newPrice) })
-                                                                            });
-                                                                        }
-                                                                    }}
-                                                                    className="text-blue-500 hover:text-blue-700 font-bold text-xs mr-2"
-                                                                >
-                                                                    EDIT
-                                                                </button>
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        if (!confirm('Delete item?')) return;
-                                                                        const token = localStorage.getItem('host_token');
-                                                                        const hostId = localStorage.getItem(`session_host_${id}`);
-                                                                        if (!token && !hostId) return;
+                                                                    await fetch(`/api/orders/${order.id}/items/${item.id}`, {
+                                                                        method: 'PATCH',
+                                                                        headers,
+                                                                        body: JSON.stringify({ itemName: newName, price: parseFloat(newPrice) })
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="text-blue-500 hover:text-blue-700 font-bold text-xs mr-2"
+                                                        >
+                                                            EDIT
+                                                        </button>
+                                                        <button
+                                                            onClick={async () => {
+                                                                if (!confirm('Delete item?')) return;
+                                                                const token = localStorage.getItem('host_token');
+                                                                const hostId = localStorage.getItem(`session_host_${id}`);
+                                                                // if (!token && !hostId) return;
 
-                                                                        const headers: Record<string, string> = {};
-                                                                        if (token) headers['Authorization'] = token;
-                                                                        if (hostId) headers['X-Host-ID'] = hostId;
+                                                                const headers: Record<string, string> = {};
+                                                                if (token) headers['Authorization'] = token;
+                                                                if (hostId) headers['X-Host-ID'] = hostId;
 
-                                                                        await fetch(`/api/orders/${order.id}/items/${item.id}`, {
-                                                                            method: 'DELETE',
-                                                                            headers
-                                                                        });
-                                                                    }}
-                                                                    className="text-red-500 hover:text-red-700 font-bold"
-                                                                >
-                                                                    X
-                                                                </button>
-                                                            </>
-                                                        )}
+                                                                await fetch(`/api/orders/${order.id}/items/${item.id}`, {
+                                                                    method: 'DELETE',
+                                                                    headers
+                                                                });
+                                                            }}
+                                                            className="text-red-500 hover:text-red-700 font-bold"
+                                                        >
+                                                            X
+                                                        </button>
                                                     </div>
                                                 </li>
                                             ))}
